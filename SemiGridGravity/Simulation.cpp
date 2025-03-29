@@ -1,13 +1,11 @@
 #include "Simulation.hpp"
 #include <cmath>
-#include <random>
+#include <execution>
 
 void Simulation::Step()
 {
-	std::random_device rd;
-	std::mt19937 engine(rd());
 	std::uniform_real_distribution<double> dist(0, 1);
-	gridOffset = { dist(engine),dist(engine) };
+	gridOffset = { dist(rand),dist(rand) };
 	UpdateGridSize();
 	UpdateCellMasses();
 	MakeQuadTree();
@@ -26,7 +24,10 @@ Vec2i Simulation::GetGridPos(Vec2d pos) const
 
 void Simulation::MakeQuadTree()
 {
-	qTree = QuadTree({ 0,0 }, gridSize + Vec2i{ 1,1 }, cells);
+	if (qTree)
+		delete qTree;
+	qTree = new QuadTree({ 0,0 }, gridSize + Vec2i{ 1,1 }, cells);
+	qTree->Prune();
 }
 
 void Simulation::UpdateGridSize()
@@ -56,6 +57,8 @@ void Simulation::UpdateGridSize()
 		}
 	}
 	boundary = currentBound;
+	boundary.c1 -= {1, 1};
+	boundary.c2 += {1, 1};
 	int sizeX = 1 + (int)(boundary.c2.x - boundary.c1.x) / (cellSize);
 	int sizeY = 1 + (int)(boundary.c2.y - boundary.c1.y) / (cellSize);
 	gridSize = { sizeX,sizeY };
@@ -64,55 +67,41 @@ void Simulation::UpdateGridSize()
 
 void Simulation::UpdateCellMasses()
 {
-	for (int i = 0; i < cells.X * cells.Y; i++)
-	{
-		cells.arr[i] = Cell();
-		cells.arr[i].particles.reserve(particles.size() / double(cells.X * cells.Y));
-	}
 	for (int i = 0; i < particles.size(); i++)
 	{
 		Particle& particle = particles[i];
 		if (!particle.active)
 			continue;
 		Vec2i gridPos = GetGridPos(particle.pos);
-		if (!cells.CheckBound((double)gridPos.x, (double)gridPos.y))
-			continue;
-		cells[gridPos].particles.push_back(&particle);
+		//if (!cells.CheckBound((double)gridPos.x, (double)gridPos.y))
+		//	continue;
+		cells[gridPos].count++;
+		cells[gridPos].mass += particle.mass;
+		cells[gridPos].center += particle.pos;
 	}
 	for (int i = 0; i < cells.X * cells.Y; i++)
 	{
-		Cell& cell = cells.arr[i];
-		cell.center = { 0,0 };
-		cell.mass = 0;
-		for (int j = 0; j < cell.particles.size(); j++)
-		{
-			cell.center += cell.particles[j]->mass * cell.particles[j]->pos;
-			cell.mass += cell.particles[j]->mass;
-		}
-		if(cell.particles.size() > 0)
-			cell.center *= (1 / cell.mass);
+		if(cells.arr[i].count > 0)
+			cells.arr[i].center *= (1 / cells.arr[i].mass);
 	}
 }
 
 void Simulation::UpdateCellForces()
 {
-	for (int i = 0; i < cells.X * cells.Y; i++)
-	{
-		//if (cells.arr[i].mass == 0)
-		//	continue;
-		//for (int j = i + 1; j < cells.X * cells.Y; j++)
-		//{
-		//	if (cells.arr[j].mass == 0)
-		//		continue;
-		//	Vec2d axis = cells.arr[i].center - cells.arr[j].center;
-		//	double dist = Mag(axis);
-		//	axis *= (1.0 / dist);
-		//	cells.arr[i].acc -= axis * (cells.arr[j].mass / (dist * dist));
-		//	cells.arr[j].acc += axis * (cells.arr[i].mass / (dist * dist));
-		//}
-		qTree.CalculateForce(*this, cells.arr[i]);
-		cells.arr[i].acc *= gravityStrength;
-	}
+	//for (int i = 0; i < cells.X * cells.Y; i++)
+	//{
+	//	if (cells.arr[i].count == 0)
+	//		continue;
+	//	qTree->CalculateForce(*this, cells.arr[i]);
+	//	cells.arr[i].acc *= gravityStrength;
+	//}
+	std::for_each(std::execution::par, cells.arr, cells.arr + cells.X * cells.Y, [&](auto&& cell)
+		{
+			if (cell.count == 0)
+				return;
+			qTree->CalculateForce(*this, cell);
+			cell.acc *= gravityStrength;
+		});
 }
 
 void Simulation::UpdateParticles()
@@ -122,21 +111,15 @@ void Simulation::UpdateParticles()
 		Particle& particle = particles[i];
 		if (!particle.active)
 			continue;
-		Vec2i gridPos = GetGridPos(particle.pos);
-		if (!cells.CheckBound((double)gridPos.x,(double)gridPos.y)) continue;
+
+		Vec2d offset = particle.pos - (boundary.c1 - gridOffset);
+		double fracX = offset.x * (1 / (boundary.c2.x - boundary.c1.x));
+		double fracY = offset.y * (1 / (boundary.c2.y - boundary.c1.y));
+		Vec2i gridPos = { (int)(fracX * gridSize.x),(int)(fracY * gridSize.y) };
+
+		if (!cells.CheckBound((double)gridPos.x, (double)gridPos.y)) continue;
 
 		particle.acc += cells[gridPos].acc;
-		//if (cells[gridPos].particles.size() > 10)
-		//{
-		//	Vec2d center = cells[gridPos].center * cells[gridPos].mass;
-		//	center -= particle.pos;
-		//	double mass = cells[gridPos].mass - particle.mass;
-		//	center = center * (1 / mass);
-		//	Vec2d axis = center - particle.pos;
-		//	double dist = Mag(axis);
-		//	axis *= (1.0 / dist);
-		//	particle.acc += 0.01 * axis * (mass / (dist * dist + 0.001));
-		//}
 		particle.Update(0.01);
 
 		if (!maxBoundary.CheckBound(particle.pos))
@@ -146,14 +129,12 @@ void Simulation::UpdateParticles()
 
 void Simulation::FillArea(int count)
 {
-	std::random_device rd;
-	std::mt19937 engine(rd());
 	std::uniform_real_distribution<double> distX(boundary.c1.x, boundary.c2.x);
 	std::uniform_real_distribution<double> distY(boundary.c1.y, boundary.c2.y);
 	for (int i = 0; i < count; i++)
 	{
 		Particle newParticle;
-		newParticle.pos = { distX(engine),distY(engine) };
+		newParticle.pos = { distX(rand),distY(rand) };
 		newParticle.vel = { 0,0 };
 		particles.push_back(newParticle);
 	}
@@ -161,30 +142,23 @@ void Simulation::FillArea(int count)
 
 void Simulation::FillCircle(int count, Vec2d center, double radius)
 {
-	std::random_device rd;
-	std::mt19937 engine(rd());
 	std::uniform_real_distribution<double> distX(boundary.c1.x, boundary.c2.x);
 	std::uniform_real_distribution<double> distY(boundary.c1.y, boundary.c2.y);
 	for (int i = 0; i < count; i++)
 	{
 		Particle newParticle;
 		while(Mag(newParticle.pos - center) > radius)
-			newParticle.pos = { distX(engine),distY(engine) };
+			newParticle.pos = { distX(rand),distY(rand) };
 		newParticle.vel = { 0,0 };
 		particles.push_back(newParticle);
 	}
 }
 
-QuadTree::QuadTree(Vec2i GridPos, Vec2i Size, Grid<Cell>& cells)
+QuadTree::QuadTree(Vec2i GridPos, Vec2i Size, Grid<Cell>& cells) : gridPos(GridPos), size(Size)
 {
-	gridPos = GridPos;
-	size = Size;
-	children = {};
 	if (size.x > 1 || size.y > 1)
 	{
 		Subdivide(cells);
-		mass = 0;
-		center = { 0,0 };
 		for (int i = 0; i < children.size(); i++)
 		{
 			mass += children[i].mass;
@@ -193,7 +167,10 @@ QuadTree::QuadTree(Vec2i GridPos, Vec2i Size, Grid<Cell>& cells)
 		if (mass > 0)
 			center *= (1 / mass);
 		else
+		{
 			center = { 0,0 };
+			active = false;
+		}
 	}
 	else
 	{
@@ -206,38 +183,61 @@ void QuadTree::Subdivide(Grid<Cell>& cells)
 {
 	if (size.x > 1 && size.y > 1)
 	{
+		children.resize(4);
 		Vec2i halfSize = 0.5 * size;
-		children.push_back(QuadTree(gridPos, halfSize, cells));
-		children.push_back(QuadTree(gridPos + Vec2i{ halfSize.x,0 }, { size.x - halfSize.x, halfSize.y },cells));
-		children.push_back(QuadTree(gridPos + Vec2i{ 0,halfSize.y }, { halfSize.x,size.y - halfSize.y }, cells));
-		children.push_back(QuadTree(gridPos + halfSize, size - halfSize, cells));
+		children[0] = QuadTree(gridPos, halfSize, cells);
+		children[1] = QuadTree(gridPos + Vec2i{ halfSize.x,0 }, { size.x - halfSize.x, halfSize.y }, cells);
+		children[2] = QuadTree(gridPos + Vec2i{ 0,halfSize.y }, { halfSize.x,size.y - halfSize.y }, cells);
+		children[3] = QuadTree(gridPos + halfSize, size - halfSize, cells);
 		return;
 	}
 	if (size.x > 1 && size.y <= 1)
 	{
+		children.resize(2);
 		Vec2i halfSize = { 0.5 * size.x,size.y };
-		children.push_back(QuadTree(gridPos, halfSize, cells));
-		children.push_back(QuadTree(gridPos + Vec2i{ halfSize.x,0 }, { size.x - halfSize.x,size.y }, cells));
+		children[0] = QuadTree(gridPos, halfSize, cells);
+		children[1] = QuadTree(gridPos + Vec2i{ halfSize.x,0 }, { size.x - halfSize.x,size.y }, cells);
 		return;
 	}
 	if (size.x <= 1 && size.y > 1)
 	{
+		children.resize(2);
 		Vec2i halfSize = { size.x,0.5 * size.y };
-		children.push_back(QuadTree(gridPos, halfSize, cells));
-		children.push_back(QuadTree(gridPos + Vec2i{ 0,halfSize.y }, { size.x,size.y - halfSize.y }, cells));
+		children[0] = QuadTree(gridPos, halfSize, cells);
+		children[1] = QuadTree(gridPos + Vec2i{0,halfSize.y}, {size.x,size.y - halfSize.y}, cells);
 		return;
 	}
 }
 
-void QuadTree::CalculateForce(Simulation& sim, Cell& cell)
+void QuadTree::Prune()
 {
-	if (mass == 0)
-		return;
+	//if (childCount == 1)
+	//{
+	//	*this = children[0];
+	//}
+
+	//for (int i = 0; i < children.size(); i++)
+	//{
+	//	if (!children[i].active)
+	//	{
+	//		children.erase(children.begin() + i);
+	//		i--;
+	//	}
+	//}
+
+	//for (int i = 0; i < children.size(); i++)
+	//{
+	//	children[i].Prune();
+	//}
+}
+
+void QuadTree::CalculateForce(Simulation& sim, Cell& cell) const
+{
 	Vec2d axis = center - cell.center;
 	double dist = Mag(axis);
 	if (children.size() == 0 || Mag(size * sim.cellSize) / dist < ratio)
 	{
-		if (Mag(cell.center - center) < 0.0001)
+		if (dist < 0.0001)
 			return;
 		axis *= (1.0 / dist);
 		cell.acc += axis * (mass / (dist * dist));
@@ -246,7 +246,8 @@ void QuadTree::CalculateForce(Simulation& sim, Cell& cell)
 	{
 		for (int i = 0; i < children.size(); i++)
 		{
-			children[i].CalculateForce(sim, cell);
+			if(children[i].active)
+				children[i].CalculateForce(sim, cell);
 		}
 	}
 }

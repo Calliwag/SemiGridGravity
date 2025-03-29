@@ -2,6 +2,7 @@
 
 #include "Particle.hpp"
 #include <vector>
+#include <random>
 
 using std::vector;
 
@@ -12,17 +13,18 @@ struct Cell
 	double mass = 0;
 	Vec2d center = { 0,0 };
 	Vec2d acc = { 0,0 };
-	vector<Particle*> particles = {};
+	int count = 0;
 };
 
 class QuadTree
 {
 public:
+	bool active = true;
 	Vec2i gridPos;
 	Vec2i size;
-	vector<QuadTree> children;
-	double mass;
-	Vec2d center;
+	vector<QuadTree> children = {};
+	double mass = 0;
+	Vec2d center = { 0,0 };
 	double ratio = 1;
 
 	QuadTree()
@@ -35,7 +37,8 @@ public:
 	}
 	QuadTree(Vec2i GridPos, Vec2i Size, Grid<Cell>& cells);
 	void Subdivide(Grid<Cell>& cells);
-	void CalculateForce(Simulation& sim, Cell& cell);
+	void Prune();
+	void CalculateForce(Simulation& sim, Cell& cell) const;
 };
 
 class Simulation
@@ -45,13 +48,14 @@ public:
 	RectD boundary;
 	RectD maxBoundary;
 
+	std::mt19937 rand;
 	Vec2i gridSize;
 	Grid<Cell> cells;
 	Vec2d gridOffset = { 0,0 };
 	double cellSize;
 	double gravityStrength;
 
-	QuadTree qTree;
+	QuadTree* qTree = nullptr;
 
 	void Step();
 

@@ -9,9 +9,11 @@ void main()
 	Simulation sim;
 	sim.boundary = { {0,0},{100,100} };
 	sim.maxBoundary = { { -50,-50 }, { 150,150 } };
-	sim.cellSize = .5;
+	//sim.maxBoundary = sim.boundary;
+	sim.cellSize = 1;
 	sim.gridSize = { 100,100 };
 	sim.cells = Grid<Cell>(101, 101);
+	sim.rand.seed(0);
 
 	//sim.FillArea(1000000);
 	sim.FillCircle(1000000, { 50,50 }, 15);
@@ -23,8 +25,8 @@ void main()
 		Vec2d axis = { particle.pos.x - 50,particle.pos.y - 50 };
 		double dist = Mag(axis);
 		axis = Norm(axis);
-		double mult = 0.5 * sqrt(dist);
-		particle.vel = { -mult * axis.y,mult * axis.x };
+		double mult = 4 * sqrt(dist) * dist;
+		particle.vel = 0.01 * Vec2d{ -mult * axis.y,mult * axis.x };
 	}
 
 	Grid<double> kernel(3, 3);
@@ -46,17 +48,17 @@ void main()
 		BeginDrawing();
 		window.ClearBackground(BLACK);
 
-		//for(int x = 0; x < 800; x++)
-		//	for (int y = 0; y < 800; y++)
-		//	{
-		//		double fracX = x / 800.0;
-		//		double fracY = y / 800.0;
-		//		Vec2i gridPos = { sim.cells.X * fracX - sim.gridOffset.x,sim.cells.Y * fracY - sim.gridOffset.y };
-		//		raylib::Vector2 screenPos(x, y);
-		//		raylib::Color color = raylib::Color::Red();
-		//		color.a = 255.0 * std::min(1.0, sim.cells[gridPos].mass / 250.0);
-		//		screenPos.DrawPixel(color);
-		//	}
+		for(int x = 0; x < 800; x++)
+			for (int y = 0; y < 800; y++)
+			{
+				double fracX = x / 800.0;
+				double fracY = y / 800.0;
+				Vec2i gridPos = { sim.cells.X * fracX - sim.gridOffset.x,sim.cells.Y * fracY - sim.gridOffset.y };
+				raylib::Vector2 screenPos(x, y);
+				raylib::Color color = raylib::Color::Red();
+				color.a = 255.0 * std::min(1.0, sim.cells[gridPos].mass / 250.0);
+				screenPos.DrawPixel(color);
+			}
 
 		if (raylib::Mouse::IsButtonPressed(MOUSE_BUTTON_LEFT))
 		{
@@ -83,7 +85,7 @@ void main()
 				continue;
 			screen[{(int)(sim.particles[i].pos.x * 8), (int)(sim.particles[i].pos.y * 8)}] += sim.particles[i].mass;
 		}
-		for(int i = 0; i < 1; i++)
+		for(int i = 0; i < 0; i++)
 			screen = Convolution(screen, kernel);
 		for(int x = 0; x < 800; x++)
 			for (int y = 0; y < 800; y++)
