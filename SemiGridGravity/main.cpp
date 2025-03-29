@@ -25,7 +25,7 @@ void main()
 		Vec2d axis = { particle.pos.x - 50,particle.pos.y - 50 };
 		double dist = Mag(axis);
 		axis = Norm(axis);
-		double mult = 4 * sqrt(dist) * dist;
+		double mult = 3 * sqrt(dist) * dist;
 		particle.vel = 0.01 * Vec2d{ -mult * axis.y,mult * axis.x };
 	}
 
@@ -43,7 +43,14 @@ void main()
 	int frame = 0;
 	while (!window.ShouldClose())
 	{
-		printf("%i \n", frame++);
+		int count = 0;
+		for (int i = 0; i < sim.particles.size(); i++)
+		{
+			if (sim.particles[i].active)
+				count++;
+		}
+
+		printf("%i: %i \n", frame++, count);
 		sim.Step();
 		BeginDrawing();
 		window.ClearBackground(BLACK);

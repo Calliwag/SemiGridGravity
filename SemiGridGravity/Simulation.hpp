@@ -3,18 +3,54 @@
 #include "Particle.hpp"
 #include <vector>
 #include <random>
+#include <mutex>
 
 using std::vector;
+using std::mutex;
 
 class Simulation;
 
 struct Cell
 {
-	double mass = 0;
-	Vec2d center = { 0,0 };
-	Vec2d acc = { 0,0 };
-	int count = 0;
+	double mass;
+	Vec2d center;
+	Vec2d acc;
+	int count;
+	mutex Mutex;
+
+	Cell& operator =(const Cell& cell)
+	{
+		mass = cell.mass;
+		center = cell.center;
+		acc = cell.acc;
+		count = cell.count;
+		return *this;
+	}
+	Cell()
+	{
+		mass = 0;
+		center = { 0,0 };
+		acc = { 0,0 };
+		count = 0;
+	}
+	Cell(const Cell& other)
+	{
+		mass = other.mass;
+		center = other.center;
+		acc = other.acc;
+		count = other.count;
+	}
 };
+
+struct QTreeSpec
+{
+	int index;
+	Vec2i gridPos;
+	Vec2i size;
+};
+
+struct NoInit {};
+const NoInit noInit;
 
 class QuadTree
 {
@@ -22,22 +58,23 @@ public:
 	bool active = true;
 	Vec2i gridPos;
 	Vec2i size;
-	vector<QuadTree> children = {};
-	double mass = 0;
-	Vec2d center = { 0,0 };
-	double ratio = 1;
+	vector<QuadTree> children;
+	double mass;
+	Vec2d center;
+	double ratio;
 
 	QuadTree()
 	{
+		children = {};
 		gridPos = { 0,0 };
 		size = { 0,0 };
-		children = {};
 		mass = 0;
 		center = { 0,0 };
+		ratio = 1;
 	}
-	QuadTree(Vec2i GridPos, Vec2i Size, Grid<Cell>& cells);
-	void Subdivide(Grid<Cell>& cells);
-	void Prune();
+	QuadTree(NoInit) {};
+	QuadTree(Vec2i GridPos, Vec2i Size, const Grid<Cell>& cells);
+	void Subdivide(const Grid<Cell>& cells);
 	void CalculateForce(Simulation& sim, Cell& cell) const;
 };
 
