@@ -3,6 +3,8 @@
 #include <cstring>
 #include <algorithm>
 
+constexpr double T_Epsilon = 1e-10;
+
 template<typename T>
 inline T lerp(T val1, T val2, double part)
 {
@@ -54,7 +56,11 @@ public:
 	int Y;
 
 	Grid() { arr = new T[1](); X = 0; Y = 0; };
-	Grid(int x, int y) : X(x), Y(y) { arr = new T[X * Y](); };
+	Grid(int x, int y) : X(x), Y(y)
+	{
+		arr = new T[X * Y];
+		std::fill(arr, arr + X * Y, T());
+	};
 	~Grid() { delete[] arr; };
 	Grid(const Grid& other) : X(other.X), Y(other.Y)
 	{
@@ -195,6 +201,12 @@ inline double Mag(Vec<N, T> vec)
 	return mag;
 }
 
+template<typename T>
+inline double Mag(Vec<2, T> vec)
+{
+	return sqrt(vec[0] * vec[0] + vec[1] * vec[1]);
+}
+
 template<int N, typename T>
 inline Vec<N, T> Norm(Vec<N, T> vec)
 {
@@ -210,7 +222,9 @@ inline Vec<N, T> Norm(Vec<N, T> vec)
 template<typename T>
 inline Vec<2, T> Norm(Vec<2, T> vec)
 {
-	return vec * (1 / sqrt(vec[0] * vec[0] + vec[1] * vec[1]));
+	double mag = sqrt(vec[0] * vec[0] + vec[1] * vec[1]);
+	if (mag < T_Epsilon) return { 0, 0 };
+	return vec * (1 / mag);
 }
 
 template<int N, typename T>

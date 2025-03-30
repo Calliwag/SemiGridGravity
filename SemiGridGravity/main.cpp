@@ -2,13 +2,13 @@
 //#define RAYMATH_DISABLE_CPP_OPERATORS
 #include <raylib-cpp.hpp>
 
-void main()
+int main()
 {
 	printf(" > Entering main\n");
 	raylib::Window window(800, 800, "Simulation");
 	Simulation sim;
 	sim.boundary = { {0,0},{100,100} };
-	sim.maxBoundary = { { -50,-50 }, { 150,150 } };
+	sim.maxBoundary = { { -15,-15 }, { 115,115 } };
 	//sim.maxBoundary = sim.boundary;
 	sim.cellSize = 1;
 	sim.gridSize = { 100,100 };
@@ -16,7 +16,7 @@ void main()
 	sim.rand.seed(0);
 
 	//sim.FillArea(1000000);
-	sim.FillCircle(1000000, { 50,50 }, 15);
+	sim.FillCircle(1000000, { 50,50 }, 25);
 	sim.gravityStrength = 0.5;
 
 	for (int i = 0; i < sim.particles.size(); i++)
@@ -25,7 +25,7 @@ void main()
 		Vec2d axis = { particle.pos.x - 50,particle.pos.y - 50 };
 		double dist = Mag(axis);
 		axis = Norm(axis);
-		double mult = 3 * sqrt(dist) * dist;
+		double mult = 3.5 * sqrt(dist) * dist;
 		particle.vel = 0.01 * Vec2d{ -mult * axis.y,mult * axis.x };
 	}
 
@@ -60,10 +60,10 @@ void main()
 			{
 				double fracX = x / 800.0;
 				double fracY = y / 800.0;
-				Vec2i gridPos = { sim.cells.X * fracX - sim.gridOffset.x,sim.cells.Y * fracY - sim.gridOffset.y };
-				raylib::Vector2 screenPos(x, y);
+				Vec2i gridPos = { int(sim.cells.X * fracX - sim.gridOffset.x),int(sim.cells.Y * fracY - sim.gridOffset.y) };
+				raylib::Vector2 screenPos((float)x, (float)y);
 				raylib::Color color = raylib::Color::Red();
-				color.a = 255.0 * std::min(1.0, sim.cells[gridPos].mass / 250.0);
+				color.a = unsigned char(255.0 * std::min(1.0, sim.cells[gridPos].mass / 250.0));
 				screenPos.DrawPixel(color);
 			}
 
@@ -92,12 +92,12 @@ void main()
 				continue;
 			screen[{(int)(sim.particles[i].pos.x * 8), (int)(sim.particles[i].pos.y * 8)}] += sim.particles[i].mass;
 		}
-		for(int i = 0; i < 0; i++)
+		for(int i = 0; i < 1; i++)
 			screen = Convolution(screen, kernel);
 		for(int x = 0; x < 800; x++)
 			for (int y = 0; y < 800; y++)
 			{
-				raylib::Vector2 screenPos(x, y);
+				raylib::Vector2 screenPos((float)x, (float)y);
 				double frac = screen[{x, y}] / 75;
 				//frac = frac * frac;
 				frac = sqrt(frac);
@@ -109,20 +109,22 @@ void main()
 				if (frac < 0.5)
 				{
 					double lFrac = 2 * frac;
-					color.r = (1 - lFrac) * color1.r + lFrac * color2.r;
-					color.g = (1 - lFrac) * color1.g + lFrac * color2.g;
-					color.b = (1 - lFrac) * color1.b + lFrac * color2.b;
+					color.r = unsigned char((1 - lFrac) * color1.r + lFrac * color2.r);
+					color.g = unsigned char((1 - lFrac) * color1.g + lFrac * color2.g);
+					color.b = unsigned char((1 - lFrac) * color1.b + lFrac * color2.b);
 				}
 				else
 				{
 					double lFrac = 2 * (frac-0.5);
-					color.r = (1 - lFrac) * color2.r + lFrac * color3.r;
-					color.g = (1 - lFrac) * color2.g + lFrac * color3.g;
-					color.b = (1 - lFrac) * color2.b + lFrac * color3.b;
+					color.r = unsigned char((1 - lFrac) * color2.r + lFrac * color3.r);
+					color.g = unsigned char((1 - lFrac) * color2.g + lFrac * color3.g);
+					color.b = unsigned char((1 - lFrac) * color2.b + lFrac * color3.b);
 				}
 				screenPos.DrawPixel({ color.r,color.g,color.b,unsigned char(255/* * frac*/) });
 			}
 
 		EndDrawing();
 	}
+
+	return 1;
 }
