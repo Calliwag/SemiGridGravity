@@ -4,6 +4,10 @@
 #include <vector>
 #include <random>
 #include <mutex>
+#include <cmath>
+#include <execution>
+#include <thread>
+#include <future>
 
 using std::vector;
 using std::mutex;
@@ -60,8 +64,9 @@ public:
 	Vec2i size;
 	vector<QuadTree> children;
 	double mass;
+	int count;
 	Vec2d center;
-	double ratio;
+	double ratio = .125;
 
 	QuadTree()
 	{
@@ -70,7 +75,7 @@ public:
 		size = { 0,0 };
 		mass = 0;
 		center = { 0,0 };
-		ratio = 1;
+		count = 0;
 	}
 	QuadTree(NoInit) {};
 	QuadTree(Vec2i GridPos, Vec2i Size, const Grid<Cell>& cells);

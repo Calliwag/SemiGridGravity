@@ -2,8 +2,16 @@
 //#define RAYMATH_DISABLE_CPP_OPERATORS
 #include <raylib-cpp.hpp>
 
+struct ScreenData
+{
+	double mass = 0;
+	Vec2i pos = { 0,0 };
+};
+
 int main()
 {
+	SetTraceLogLevel(LOG_FATAL);
+
 	printf(" > Entering main\n");
 	raylib::Window window(800, 800, "Simulation");
 	Simulation sim;
@@ -13,10 +21,10 @@ int main()
 	sim.cellSize = 1;
 	sim.gridSize = { 100,100 };
 	sim.cells = Grid<Cell>(101, 101);
-	sim.rand.seed(0);
+	sim.rand.seed(10);
 
 	//sim.FillArea(1000000);
-	sim.FillCircle(1000000, { 50,50 }, 25);
+	sim.FillCircle(1000000, { 50,50 }, 15);
 	sim.gravityStrength = 0.5;
 
 	for (int i = 0; i < sim.particles.size(); i++)
@@ -25,20 +33,21 @@ int main()
 		Vec2d axis = { particle.pos.x - 50,particle.pos.y - 50 };
 		double dist = Mag(axis);
 		axis = Norm(axis);
-		double mult = 3.5 * sqrt(dist) * dist;
+		double mult = 4.5 * sqrt(dist) * dist;
 		particle.vel = 0.01 * Vec2d{ -mult * axis.y,mult * axis.x };
 	}
 
-	Grid<double> kernel(3, 3);
-	kernel[{0, 0}] = 1.0 / 16.0;
-	kernel[{0, 1}] = 2.0 / 16.0;
-	kernel[{0, 2}] = 1.0 / 16.0;
-	kernel[{1, 0}] = 2.0 / 16.0;
-	kernel[{1, 1}] = 4.0 / 16.0;
-	kernel[{1, 2}] = 2.0 / 16.0;
-	kernel[{2, 0}] = 1.0 / 16.0;
-	kernel[{2, 1}] = 2.0 / 16.0;
-	kernel[{2, 2}] = 1.0 / 16.0;
+	float kernel[9] = {
+		1.0 / 16.0,
+		2.0 / 16.0,
+		1.0 / 16.0,
+		2.0 / 16.0,
+		4.0 / 16.0,
+		2.0 / 16.0,
+		1.0 / 16.0,
+		2.0 / 16.0,
+		1.0 / 16.0
+	};
 
 	int frame = 0;
 	while (!window.ShouldClose())
@@ -55,73 +64,60 @@ int main()
 		BeginDrawing();
 		window.ClearBackground(BLACK);
 
-		for(int x = 0; x < 800; x++)
-			for (int y = 0; y < 800; y++)
-			{
-				double fracX = x / 800.0;
-				double fracY = y / 800.0;
-				Vec2i gridPos = { int(sim.cells.X * fracX - sim.gridOffset.x),int(sim.cells.Y * fracY - sim.gridOffset.y) };
-				raylib::Vector2 screenPos((float)x, (float)y);
-				raylib::Color color = raylib::Color::Red();
-				color.a = unsigned char(255.0 * std::min(1.0, sim.cells[gridPos].mass / 250.0));
-				screenPos.DrawPixel(color);
-			}
-
-		if (raylib::Mouse::IsButtonPressed(MOUSE_BUTTON_LEFT))
+		Grid<ScreenData> screen(800, 800);
+		for (int x = 0; x < screen.X; x++)
 		{
-			Vector2 mPosRL = raylib::Mouse::GetPosition();
-			Vec2d mPos = { mPosRL.x / 8.0,mPosRL.y / 8.0 };
-			for (int i = 0; i < sim.particles.size(); i++)
+			for (int y = 0; y < screen.Y; y++)
 			{
-				Particle& particle = sim.particles[i];
-				Vec2d axis = (particle.pos - mPos);
-				double dist = Mag(axis);
-				axis = Norm(axis);
-				double force = 10000.0 / (dist * dist);
-				Vec2d push = force * axis;
-				particle.acc += push;
+				screen[{x, y}].mass = 0;
+				screen[{x, y}].pos = { x,y };
 			}
 		}
-
-		Grid<double> screen(800, 800);
 		for (int i = 0; i < sim.particles.size(); i++)
 		{
 			if (!sim.particles[i].active)
 				continue;
 			if (!screen.CheckBound({ (int)(sim.particles[i].pos.x * 8), (int)(sim.particles[i].pos.y * 8) }))
 				continue;
-			screen[{(int)(sim.particles[i].pos.x * 8), (int)(sim.particles[i].pos.y * 8)}] += sim.particles[i].mass;
+			screen[{(int)(sim.particles[i].pos.x * 8), (int)(sim.particles[i].pos.y * 8)}].mass += sim.particles[i].mass;
 		}
-		for(int i = 0; i < 1; i++)
-			screen = Convolution(screen, kernel);
-		for(int x = 0; x < 800; x++)
-			for (int y = 0; y < 800; y++)
+		mutex drawMutex;
+		raylib::Image screenImg(800, 800);
+		std::for_each(std::execution::par_unseq, screen.arr, screen.arr + screen.X * screen.Y, [&](const ScreenData& data) {
+			int x = data.pos.x;
+			int y = data.pos.y;
+			double frac = data.mass / 75;
+			//frac = frac * frac;
+			frac = sqrt(frac);
+			if (frac > 1) frac = 1;
+			Color color1 = { 0,0,0,255 };
+			Color color2 = { 192,64,0,255 };
+			Color color3 = { 255,255,0,255 };
+			Color color = BLACK;
+			if (frac < 0.5)
 			{
-				raylib::Vector2 screenPos((float)x, (float)y);
-				double frac = screen[{x, y}] / 75;
-				//frac = frac * frac;
-				frac = sqrt(frac);
-				if (frac > 1) frac = 1;
-				Color color1 = { 0,0,0,255 };
-				Color color2 = { 192,64,0,255 };
-				Color color3 = { 255,255,0,255 };
-				Color color = BLACK;
-				if (frac < 0.5)
-				{
-					double lFrac = 2 * frac;
-					color.r = unsigned char((1 - lFrac) * color1.r + lFrac * color2.r);
-					color.g = unsigned char((1 - lFrac) * color1.g + lFrac * color2.g);
-					color.b = unsigned char((1 - lFrac) * color1.b + lFrac * color2.b);
-				}
-				else
-				{
-					double lFrac = 2 * (frac-0.5);
-					color.r = unsigned char((1 - lFrac) * color2.r + lFrac * color3.r);
-					color.g = unsigned char((1 - lFrac) * color2.g + lFrac * color3.g);
-					color.b = unsigned char((1 - lFrac) * color2.b + lFrac * color3.b);
-				}
-				screenPos.DrawPixel({ color.r,color.g,color.b,unsigned char(255/* * frac*/) });
+				double lFrac = 2 * frac;
+				color.r = (unsigned char)((1 - lFrac) * color1.r + lFrac * color2.r);
+				color.g = (unsigned char)((1 - lFrac) * color1.g + lFrac * color2.g);
+				color.b = (unsigned char)((1 - lFrac) * color1.b + lFrac * color2.b);
 			}
+			else
+			{
+				double lFrac = 2 * (frac - 0.5);
+				color.r = (unsigned char)((1 - lFrac) * color2.r + lFrac * color3.r);
+				color.g = (unsigned char)((1 - lFrac) * color2.g + lFrac * color3.g);
+				color.b = (unsigned char)((1 - lFrac) * color2.b + lFrac * color3.b);
+			}
+			color.a = 255;
+			raylib::Vector2 screenPos((float)x, (float)y);
+			{
+				std::lock_guard<mutex> lock(drawMutex);
+				screenImg.DrawPixel(x, y, color);
+			}
+			});
+		screenImg.KernelConvolution(kernel, 9);
+		raylib::Texture screenTex(screenImg);
+		screenTex.Draw();
 
 		EndDrawing();
 	}

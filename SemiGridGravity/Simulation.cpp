@@ -1,8 +1,4 @@
 #include "Simulation.hpp"
-#include <cmath>
-#include <execution>
-#include <thread>
-#include <future>
 
 void Simulation::Step()
 {
@@ -155,33 +151,45 @@ void Simulation::FillCircle(int count, Vec2d center, double radius)
 
 QuadTree::QuadTree(Vec2i GridPos, Vec2i Size, const Grid<Cell>& cells) : gridPos(GridPos), size(Size)
 {
+	mass = 0;
+	center = { 0,0 };
+	count = 0;
 	if (size.x > 1 || size.y > 1)
 	{
 		Subdivide(cells);
+		children.erase(std::remove_if(children.begin(), children.end(), [&](QuadTree& child) { return !child.active; }), children.end());
+		if (children.size() == 0)
+		{
+			active = false;
+			return;
+		}
+		else if (children.size() == 1)
+		{
+			QuadTree child = children.front();
+			children = {};
+			*this = child;
+			return;
+		}
 		for (int i = 0; i < children.size(); i++)
 		{
 			mass += children[i].mass;
 			center += children[i].center * children[i].mass;
+			count += children[i].count;
 		}
-		if(mass > T_Epsilon)
+		if (mass > T_Epsilon)
 			center *= (1 / mass);
-		else
-		{
-			mass = 0;
-			center = { 0,0 };
-			active = false;
-		}
 	}
 	else
 	{
-		mass = cells.TryGet(gridPos).mass;
-		center = cells.TryGet(gridPos).center;
-		if (mass < T_Epsilon)
-		{
-			mass = 0;
-			center = { 0,0 };
-			active = false;
-		}
+		Cell cell = cells.TryGet(gridPos);
+		mass = cell.mass;
+		center = cell.center;
+		count = cell.count;
+	}
+
+	if (mass < T_Epsilon || count == 0)
+	{
+		active = false;
 	}
 }
 
